@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Guardian Kids - Родительский контроль и безопасность</title>
+  <meta name="description" content="Система родительского контроля Guardian Kids: мониторинг геолокации, контроль смещения, рация PTT, отправка фото и удаленное управление">
+  <meta name="theme-color" content="#0d131a">
+  
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Guardian Kids">
+  <link rel="icon" href="icon-192.svg">
+  
+  <!-- Locally Bundled Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="leaflet.css" />
+  <script src="leaflet.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Locally Bundled MQTT Client JS -->
+  <script src="mqtt.min.js"></script>
+</head>
+<body>
+
+  <!-- ============================================== -->
+  <!-- 0. FIRST LAUNCH ONBOARDING / PAIRING WIZARD    -->
+  <!-- ============================================== -->
+  <div class="onboarding-overlay" id="onboardingOverlay" style="display: none;">
+    <div class="onboarding-card">
+      <div class="onboarding-shield">🛡️</div>
+
+      <!-- Step 1: Role Selection -->
+      <div id="obStep1">
+        <h2 class="ob-title">Добро пожаловать в Guardian Kids</h2>
+        <p class="ob-subtitle">Кто будет пользоваться этим телефоном?</p>
+
+        <div class="ob-role-options">
+          <button class="ob-role-card" id="btnChooseParent">
+            <span class="ob-role-icon">👑</span>
+            <div class="ob-role-info">
+              <span class="ob-role-name">Я Родитель</span>
+              <span class="ob-role-desc">Контроль, карта, прослушка и вызовы</span>
+            </div>
+            <span class="ob-role-arrow">➔</span>
+          </button>
+
+          <button class="ob-role-card ob-child-card" id="btnChooseChild">
+            <span class="ob-role-icon">🧒</span>
+            <div class="ob-role-info">
+              <span class="ob-role-name">Это телефон Ребенка</span>
+              <span class="ob-role-desc">Защита, кнопка SOS, рация и камера</span>
+            </div>
+            <span class="ob-role-arrow">➔</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2 (Child): Display Unique Device Number -->
+      <div id="obStepChild" style="display: none;">
+        <h2 class="ob-title">Уникальный номер ребенка</h2>
+        <p class="ob-subtitle">Введите этот номер на телефоне родителя для привязки:</p>
+
+        <div class="ob-unique-badge" id="obChildUniqueId">--- ---</div>
+
+        <p class="ob-hint">На телефоне ребенка больше ничего настраивать не нужно. У ребенка будут доступны только 3 кнопки: SOS, Рация и Камера.</p>
+
+        <button class="btn-primary ob-finish-btn" id="btnFinishChildSetup">Понятно, открыть экран ребенка</button>
+      </div>
+
+      <!-- Step 2 (Parent): Enter Child Number & Create PINs -->
+      <div id="obStepParent" style="display: none;">
+        <h2 class="ob-title">Привязка ребенка</h2>
+        <p class="ob-subtitle">Введите 6-значный номер с экрана ребенка и задайте пароли:</p>
+
+        <div class="form-group">
+          <label>Уникальный номер с экрана ребенка:</label>
+          <input type="number" id="obInputChildId" placeholder="Например: 582914" maxlength="6" inputmode="numeric">
+        </div>
+
+        <div class="form-group">
+          <label>Придумайте PIN Администратора (для себя):</label>
+          <input type="password" id="obInputAdminPin" placeholder="4 цифры" maxlength="4" inputmode="numeric">
+        </div>
+
+        <div class="form-group">
+          <label>Придумайте PIN Ребенка (для выхода из защиты):</label>
+          <input type="password" id="obInputChildPin" placeholder="4 цифры" maxlength="4" inputmode="numeric">
+        </div>
+
+        <button class="btn-primary ob-finish-btn" id="btnFinishParentSetup">Связать устройства и начать</button>
+        <button class="btn-secondary" id="btnBackToStep1" style="width:100%; margin-top:8px;">Назад</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- PIN LOCK SCREEN (For Admin Mode Access)        -->
+  <!-- ============================================== -->
+  <div class="lock-screen-overlay" id="lockScreenOverlay" style="display: none;">
+    <div class="lock-card">
+      <div class="lock-shield-icon">🛡️</div>
+      <div class="lock-title">GUARDIAN БЕЗОПАСНОСТЬ</div>
+      <div class="lock-subtitle" id="lockSubtitle">Введите PIN Администратора</div>
+
+      <div class="pin-display">
+        <div class="pin-dot" id="pDot1"></div>
+        <div class="pin-dot" id="pDot2"></div>
+        <div class="pin-dot" id="pDot3"></div>
+        <div class="pin-dot" id="pDot4"></div>
+      </div>
+      <div class="lock-error-msg" id="lockErrorMsg"></div>
+
+      <!-- Keypad -->
+      <div class="pin-keypad">
+        <button class="pin-key" data-key="1">1</button>
+        <button class="pin-key" data-key="2">2</button>
+        <button class="pin-key" data-key="3">3</button>
+        <button class="pin-key" data-key="4">4</button>
+        <button class="pin-key" data-key="5">5</button>
+        <button class="pin-key" data-key="6">6</button>
+        <button class="pin-key" data-key="7">7</button>
+        <button class="pin-key" data-key="8">8</button>
+        <button class="pin-key" data-key="9">9</button>
+        <button class="pin-key bio-key" id="btnBiometricUnlock" title="Отпечаток пальца">👆</button>
+        <button class="pin-key" data-key="0">0</button>
+        <button class="pin-key del-key" id="btnPinDelete" title="Стереть">⌫</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Displacement / Geofence Alert Banner -->
+  <div class="displacement-alert-banner" id="displacementAlertBanner" style="display: none;">
+    <div class="alert-banner-content">
+      <div class="alert-banner-icon">⚠️</div>
+      <div class="alert-banner-text">
+        <div class="alert-banner-title" id="alertBannerTitle">ВНИМАНИЕ: Смещение ребенка!</div>
+        <div class="alert-banner-sub" id="alertBannerSub">Ребенок отошел на 150м от контрольной точки</div>
+      </div>
+      <button class="alert-banner-btn" id="btnLocateDisplacement">На карту</button>
+      <button class="alert-banner-close" id="btnDismissAlert">&times;</button>
+    </div>
+  </div>
+
+  <!-- Ambient Audio Listening Floating Indicator -->
+  <div class="ambient-listening-floater" id="ambientListeningFloater" style="display: none;">
+    <div class="floater-pulse"></div>
+    <div class="floater-info">
+      <span class="floater-title">🎙️ Идет прослушивание окружения</span>
+      <span class="floater-sub">Аудио транслируется с микрофона ребенка</span>
+    </div>
+    <button class="floater-stop-btn" id="btnFloaterStopListen">Остановить</button>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- 1. ADMIN (PARENT) DASHBOARD                    -->
+  <!-- ============================================== -->
+  <div class="dashboard-container" id="adminDashboard" style="display: none;">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-top-row">
+        <div class="header-left">
+          <div class="app-logo">🛡️ GUARDIAN KIDS</div>
+          <div class="profile-badge admin-badge" id="adminHeaderBadge">Родитель</div>
+        </div>
+        <div class="header-top-actions">
+          <button class="header-btn" id="btnOpenConfig" title="Настройки и ID Ребенка">⚙️</button>
+          <button class="header-btn" id="btnSwitchProfile" title="Заблокировать">🔒</button>
+        </div>
+      </div>
+      <div class="header-sub-row">
+        <div class="child-status-chip" id="childStatusChip">
+          <span class="status-dot online" id="childOnlineDot"></span>
+          <span class="status-text" id="childStatusText">Ребенок: В сети</span>
+          <span class="status-battery" id="childBatteryText">🔋 100%</span>
+        </div>
+        <div class="header-media-actions">
+          <button class="header-btn btn-photo-badge" id="btnOpenPhotos" title="Снимки с камеры ребенка">📸 Фото</button>
+          <button class="header-btn btn-video-badge" id="btnOpenVideos" title="Видеосообщения от ребенка">🎥 Видео</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-content">
+      <!-- Section: Live Interactive Map -->
+      <section class="card map-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">🗺️</span>
+            <span>Геолокация ребенка</span>
+          </div>
+          <div class="map-layer-selector">
+            <button class="layer-btn active" data-layer="streets">Улицы</button>
+            <button class="layer-btn" data-layer="satellite">Спутник</button>
+            <button class="layer-btn" data-layer="osm">OSM</button>
+          </div>
+        </div>
+
+        <div class="map-container" id="tacticalMap"></div>
+
+        <div class="map-status-bar">
+          <div class="map-coord-info" id="mapCoordInfo">Определение координат ребенка...</div>
+          <div class="map-quick-actions">
+            <button class="map-btn" id="btnZoomIn">➕</button>
+            <button class="map-btn" id="btnZoomOut">➖</button>
+            <button class="map-btn" id="btnCenterChild" title="Центрировать на ребенке">🧒 Ребенок</button>
+            <button class="map-btn" id="btnCenterParent" title="Центрировать на мне">👨 Я</button>
+            <button class="map-btn" id="btnCenterBoth" title="Показать обоих">🎯 Оба</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Parent 2-Way Walkie-Talkie (PTT) -->
+      <section class="card ptt-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">🎙️</span>
+            <span>Голосовая связь (Рация)</span>
+          </div>
+          <span class="ptt-status-label" id="parentPttStatus">Готов к передаче</span>
+        </div>
+        <div class="parent-ptt-wrap">
+          <button class="parent-ptt-btn" id="btnParentPtt">
+            <span class="parent-ptt-icon">🎙️</span>
+            <span class="parent-ptt-text">УДЕРЖИВАЙТЕ, ЧТОБЫ СКАЗАТЬ</span>
+            <span class="parent-ptt-sub">Голос сразу прозвучит из динамика ребенка</span>
+          </button>
+          <button class="parent-voice-fx-toggle" id="btnParentVoiceFx">🎭 Эффект голоса: 🎙️ Обычный</button>
+        </div>
+      </section>
+
+      <!-- Section: Geofence & Displacement Control -->
+      <section class="card geofence-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">⚓</span>
+            <span>Контрольные гео-зоны (Дом, Школа и др.)</span>
+          </div>
+          <button class="btn-secondary" id="btnOpenAddZoneModal" style="padding: 4px 10px; font-size: 11px;">➕ Добавить зону</button>
+        </div>
+
+        <div class="geofence-body">
+          <p class="launcher-hint">Уведомления приходят, когда ребенок приходит или уходит из этих мест:</p>
+          
+          <div class="geofence-zones-list" id="geofenceZonesList" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+            <!-- Dynamically rendered zones (Home, School, etc.) -->
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-secondary" id="btnQuickAnchorCurrent" style="flex: 1; font-size: 11px; padding: 8px;">📍 Сохранить текущее место ребенка</button>
+          </div>
+
+          <!-- Zone Event History Log -->
+          <div id="zoneEventsLog" style="margin-top: 8px; max-height: 85px; overflow-y: auto; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 6px; font-size: 10px; color: #94a3b8; display: none;">
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Remote Device Control (Sound, GPS, Audio Surveillance) -->
+      <section class="card controls-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">⚡</span>
+            <span>Удаленное управление</span>
+          </div>
+        </div>
+
+        <div class="controls-grid">
+          <!-- Action: Remote Toggle Child GPS -->
+          <button class="action-card" id="btnToggleChildGps">
+            <div class="action-icon" id="gpsToggleIcon">📍</div>
+            <div class="action-title" id="gpsToggleTitle">Геолокация: ВКЛ</div>
+            <div class="action-desc" id="gpsToggleDesc">Нажмите для отключения GPS у ребенка</div>
+          </button>
+
+          <!-- Action: Unified Sound Mode Toggle with Volume Selection -->
+          <div class="action-card" id="cardSoundControl" style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div id="btnToggleSoundMode" style="cursor: pointer; width: 100%;">
+              <div class="action-icon" id="soundActionIcon">🔊</div>
+              <div class="action-title" id="soundActionTitle">Звук: 100%</div>
+              <div class="action-desc" id="soundActionDesc">Нажмите для беззвучного режима</div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); width: 100%;">
+              <span style="font-size: 10px; color: #94a3b8;">Громкость:</span>
+              <div class="volume-pills" style="display: flex; gap: 4px;">
+                <button class="vol-pill" data-vol="30" style="padding: 2px 6px; font-size: 9px; border-radius: 4px; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; cursor: pointer;">30%</button>
+                <button class="vol-pill" data-vol="60" style="padding: 2px 6px; font-size: 9px; border-radius: 4px; border: 1px solid #334155; background: #1e293b; color: #cbd5e1; cursor: pointer;">60%</button>
+                <button class="vol-pill active" data-vol="100" style="padding: 2px 6px; font-size: 9px; border-radius: 4px; border: 1px solid #3b82f6; background: #2563eb; color: #fff; cursor: pointer;">100%</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action: Ambient Listening (Hold to Listen in Real-Time) -->
+          <button class="action-card action-mic" id="btnHoldListenAmbient">
+            <div class="action-icon" id="micActionIcon">🎙️</div>
+            <div class="action-title" id="micActionTitle">Слушать (Держите)</div>
+            <div class="action-desc" id="micActionDesc">Удерживайте для прослушки в реальном времени</div>
+          </button>
+
+          <!-- Action: Remote Power Saver Mode -->
+          <button class="action-card action-power" id="btnTogglePowerSaver">
+            <div class="action-icon" id="powerSaverIcon">🔋</div>
+            <div class="action-title" id="powerSaverTitle">Энергосбережение</div>
+            <div class="action-desc" id="powerSaverDesc">Снизить яркость до 2% и экономить батарею</div>
+          </button>
+
+          <!-- Action: Remote Launch Guardian App -->
+          <button class="action-card action-relaunch" id="btnRelaunchChildApp">
+            <div class="action-icon">🚀</div>
+            <div class="action-title">Запустить Guardian</div>
+            <div class="action-desc">Открыть программу на экране ребенка из фона</div>
+          </button>
+
+          <!-- Action: Wake Up / Alarm Call -->
+          <button class="action-card action-alert" id="btnWakeChild">
+            <div class="action-icon">🚨</div>
+            <div class="action-title">Экстренный вызов</div>
+            <div class="action-desc">Разбудить экран ребенка звуком сирены</div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Section: Remote App Launcher (Customizable by Parent) -->
+      <section class="card launcher-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">🚀</span>
+            <span>Удаленный запуск приложений</span>
+          </div>
+          <button class="btn-secondary" id="btnShowAddAppModal" style="padding: 4px 10px; font-size: 11px;">➕ Добавить</button>
+        </div>
+
+        <div class="launcher-body">
+          <p class="launcher-hint">Нажмите на карточку, чтобы открыть приложение у ребенка. Нажмите ✖ для удаления из списка:</p>
+          
+          <div class="custom-apps-grid" id="remoteAppsGrid">
+            <!-- Dynamically rendered apps with launch and delete buttons -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- 2. USER 1 (CHILD) SAFE SCREEN - EXACTLY 3 BTNS -->
+  <!-- ============================================== -->
+  <div class="child-safe-container" id="childDashboard" style="display: none;">
+    <!-- Minimalist Child Header -->
+    <div class="child-safe-header">
+      <div class="child-header-left">
+        <span class="child-avatar-badge" id="childHeaderAvatar" style="font-size: 22px; margin-right: 6px;">🧒</span>
+        <span class="child-brand-text" id="childHeaderName">GUARDIAN KIDS</span>
+        <span class="child-id-tag" id="childHeaderIdTag">ID: ------</span>
+      </div>
+      <div class="child-header-right">
+        <span class="child-battery-badge" id="childHeaderBattery">🔋 100%</span>
+        <button class="child-lock-btn" id="btnChildSettings" title="Настройки устройства (по PIN)">⚙️</button>
+        <button class="child-lock-btn" id="btnChildSwitchToAdmin" title="Вход для родителей" style="display: none;">🔒</button>
+      </div>
+    </div>
+
+    <!-- Hidden Inputs for Real-time Camera, Video and Gallery -->
+    <input type="file" id="childCameraCaptureInput" accept="image/*" capture="environment" style="display: none;">
+    <input type="file" id="childVideoCaptureInput" accept="video/*" capture="environment" style="display: none;">
+    <input type="file" id="childGalleryPickerInput" accept="image/*" style="display: none;">
+
+    <!-- Accessibility Protection Alert Banner -->
+    <div id="bannerAccessibilityPrompt" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; margin: 8px 16px 0; padding: 8px 12px; align-items: center; justify-content: space-between;">
+      <div style="font-size: 11px; color: #fca5a5; line-height: 1.2;">
+        <strong>🛡️ Включите авто-защиту:</strong><br>Для работы в фоне и авто-включения GPS.
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center; margin-left: 8px;">
+        <button class="btn-secondary" id="btnHelpAccessibilityBanner" title="Инструкция для Android 13/14" style="font-size: 11px; padding: 5px 8px; color: #60a5fa; border-color: rgba(96, 165, 250, 0.4);">❓</button>
+        <button class="btn-primary" id="btnActivateAccessibility" style="background: #ef4444; font-size: 10px; padding: 6px 10px; white-space: nowrap;">ВКЛЮЧИТЬ</button>
+      </div>
+    </div>
+
+    <!-- Unknown Sources Permission Prompt Banner for Child -->
+    <div id="bannerUnknownSourcesPrompt" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 12px; margin: 8px 16px 0; padding: 8px 12px; align-items: center; justify-content: space-between;">
+      <div style="font-size: 11px; color: #fde68a; line-height: 1.2;">
+        <strong>⚠️ Разрешите установку обновлений:</strong><br>Включите тумблер для автообновления по воздуху.
+      </div>
+      <button class="btn-primary" id="btnActivateUnknownSources" style="background: #f59e0b; color: #000; font-weight: bold; font-size: 10px; padding: 6px 10px; white-space: nowrap; margin-left: 8px;">РАЗРЕШИТЬ</button>
+    </div>
+
+    <!-- CHILD ACTION BUTTONS -->
+    <div class="child-trio-buttons">
+      <!-- TOP ROW: SOS, CAMERA and VIDEO -->
+      <div class="child-top-actions">
+        <!-- BUTTON 1: SOS -->
+        <button class="child-small-btn btn-trio-sos" id="btnChildSos">
+          <div class="btn-glow-ring"></div>
+          <span class="trio-icon">🆘</span>
+          <span class="trio-title">SOS</span>
+        </button>
+        <!-- BUTTON 2: CAMERA -->
+        <button class="child-small-btn btn-trio-cam" id="btnChildCamera">
+          <span class="trio-icon">📸</span>
+          <span class="trio-title">Фото</span>
+        </button>
+        <!-- BUTTON 3: VIDEO -->
+        <button class="child-small-btn btn-trio-vid" id="btnChildVideo">
+          <span class="trio-icon">🎥</span>
+          <span class="trio-title">Видео</span>
+        </button>
+      </div>
+
+      <!-- VOICE EFFECT SELECTOR FOR CHILD -->
+      <button class="child-voice-fx-toggle" id="btnChildVoiceFx">🎭 Голос: 🎙️ Обычный</button>
+
+      <!-- BUTTON: WALKIE-TALKIE MIC -->
+      <button class="child-big-btn btn-trio-mic" id="btnChildPtt">
+        <span class="trio-icon">🎙️</span>
+        <span class="trio-title">Рация</span>
+        <span class="trio-sub">Удерживайте, чтобы сказать родителю</span>
+      </button>
+    </div>
+
+    <div class="child-footer-note">
+      <span class="dot-live"></span> Защита и геолокация активны 24/7
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: PHOTO GALLERY (FOR PARENT)              -->
+  <!-- ============================================== -->
+  <div class="modal" id="modalPhotoGallery">
+    <div class="modal-card modal-photo-card" style="max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 id="photoGalleryTitle">📸 Галерея снимков ребенка</h3>
+        <button class="modal-close" id="btnClosePhotoGallery">&times;</button>
+      </div>
+      <div class="modal-body photo-modal-body" style="overflow-y: auto; flex: 1; padding: 10px;">
+        <!-- Large preview of selected photo -->
+        <div class="photo-img-wrap" id="selectedPhotoWrap" style="margin-bottom: 8px; display: none;">
+          <img id="viewerPhotoImage" src="" alt="Снимок от ребенка">
+        </div>
+        <div class="photo-meta-row" id="selectedPhotoMetaRow" style="display: none; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 12px; gap: 8px;">
+          <div class="photo-meta-info" id="photoMetaInfo" style="margin: 0; text-align: left; font-size: 11px;"></div>
+          <button class="btn-secondary" id="btnDeleteSelectedPhoto" style="color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 11px; padding: 4px 8px; white-space: nowrap;">🗑️ Удалить этот снимок</button>
+        </div>
+
+        <div style="font-size: 12px; font-weight: bold; color: #fff; margin-bottom: 8px;">Все полученные фотографии:</div>
+        <div class="gallery-thumbs-grid" id="galleryThumbsGrid">
+          <!-- Dynamically populated thumbnails -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 8px;">
+        <button class="btn-secondary" id="btnClearPhotoGallery" style="color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 12px;">🗑️ Удалить все</button>
+        <button class="btn-primary" id="btnDismissPhotoGallery" style="flex: 1;">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: VIDEO GALLERY (FOR PARENT)              -->
+  <!-- ============================================== -->
+  <div class="modal" id="modalVideoGallery">
+    <div class="modal-card modal-photo-card" style="max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 id="videoGalleryTitle">🎥 Видеосообщения ребенка (1080p)</h3>
+        <button class="modal-close" id="btnCloseVideoGallery">&times;</button>
+      </div>
+      <div class="modal-body photo-modal-body" style="overflow-y: auto; flex: 1; padding: 10px;">
+        <!-- Large preview of selected video -->
+        <div class="video-player-wrap" id="selectedVideoWrap" style="margin-bottom: 8px; display: none; text-align: center;">
+          <video id="viewerVideoPlayer" controls playsinline style="max-width: 100%; max-height: 280px; border-radius: 8px; background: #000;"></video>
+        </div>
+        <div class="photo-meta-row" id="selectedVideoMetaRow" style="display: none; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 12px; gap: 8px;">
+          <div class="photo-meta-info" id="videoMetaInfo" style="margin: 0; text-align: left; font-size: 11px;"></div>
+          <button class="btn-secondary" id="btnDeleteSelectedVideo" style="color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 11px; padding: 4px 8px; white-space: nowrap;">🗑️ Удалить это видео</button>
+        </div>
+
+        <div style="font-size: 12px; font-weight: bold; color: #fff; margin-bottom: 8px;">Все полученные видео:</div>
+        <div class="gallery-thumbs-grid" id="videoGalleryThumbsGrid">
+          <!-- Dynamically populated video items -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 8px;">
+        <button class="btn-secondary" id="btnClearVideoGallery" style="color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 12px;">🗑️ Удалить все</button>
+        <button class="btn-primary" id="btnDismissVideoGallery" style="flex: 1;">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: VOICE EFFECTS SELECTOR                  -->
+  <!-- ============================================== -->
+  <div class="modal" id="modalVoiceEffects">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🎭 Выбор эффекта для рации</h3>
+        <button class="modal-close" id="btnCloseVoiceEffects">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 12px;">
+        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">Собеседник услышит ваши слова с выбранным эффектом:</p>
+        <div class="voice-fx-grid">
+          <div class="voice-fx-card active" data-fx="normal">
+            <span class="voice-fx-icon">🎙️</span>
+            <div class="voice-fx-info">
+              <strong>Обычный голос</strong>
+              <small>Чистый естественный звук</small>
+            </div>
+          </div>
+          <div class="voice-fx-card" data-fx="robot">
+            <span class="voice-fx-icon">🤖</span>
+            <div class="voice-fx-info">
+              <strong>Робот / Киборг</strong>
+              <small>Металлический голос андроида</small>
+            </div>
+          </div>
+          <div class="voice-fx-card" data-fx="alien">
+            <span class="voice-fx-icon">👽</span>
+            <div class="voice-fx-info">
+              <strong>Инопланетянин</strong>
+              <small>Космический голос пришельца</small>
+            </div>
+          </div>
+          <div class="voice-fx-card" data-fx="monster">
+            <span class="voice-fx-icon">🐻</span>
+            <div class="voice-fx-info">
+              <strong>Великан / Монстр</strong>
+              <small>Глубокий низкий бас великана</small>
+            </div>
+          </div>
+          <div class="voice-fx-card" data-fx="chipmunk">
+            <span class="voice-fx-icon">🐿️</span>
+            <div class="voice-fx-info">
+              <strong>Бурундук (Элвин)</strong>
+              <small>Смешной мультяшный голос</small>
+            </div>
+          </div>
+          <div class="voice-fx-card" data-fx="echo">
+            <span class="voice-fx-icon">🏰</span>
+            <div class="voice-fx-info">
+              <strong>Эхо в пещере</strong>
+              <small>Объёмное эхо зала / пещеры</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btnDismissVoiceEffects" style="width: 100%;">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Child Camera Choice (Real-time camera or Gallery) -->
+  <div class="modal" id="modalCameraChoice">
+    <div class="modal-card camera-choice-card">
+      <div class="modal-header">
+        <h3>📸 Отправить фото родителям</h3>
+        <button class="modal-close" id="btnCloseCameraChoice">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 16px; text-align: center;">Выберите, как сделать снимок:</p>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button class="btn-primary" id="btnChildChooseRealtime" style="padding: 16px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(135deg, #059669 0%, #047857 100%);">
+            <span style="font-size: 24px;">📸</span>
+            <span>Снять на камеру прямо сейчас</span>
+          </button>
+          <button class="btn-secondary" id="btnChildChooseGallery" style="padding: 16px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 10px; border-color: #3b82f6;">
+            <span style="font-size: 24px;">🖼️</span>
+            <span>Выбрать фото из галереи</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: center; margin-top: 14px;">
+        <button class="btn-secondary" id="btnChildCancelCamera" style="width: 100%;">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: SOS Emergency Alarm (for Parent) -->
+  <div class="modal" id="modalSosAlarm">
+    <div class="modal-card incoming-call-card" style="border: 3px solid #ef4444; box-shadow: 0 0 60px rgba(239,68,68,0.8);">
+      <div class="call-pulse-icon" style="animation: pulse-ring 1s infinite;">🚨</div>
+      <div class="call-title" style="color: #ef4444; font-size: 22px;">СИГНАЛ SOS ОТ РЕБЕНКА!</div>
+      <div class="call-caller-id" id="sosAlarmCallerId">РЕБЕНОК В ОПАСНОСТИ</div>
+      <div class="call-channel-info" id="sosAlarmCoordsInfo">Координаты определены</div>
+
+      <div class="modal-footer-row" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+        <button class="btn-primary" id="btnSosViewOnMap" style="background: #2563eb; padding: 14px; font-size: 14px; width: 100%;">🗺️ Показать на карте</button>
+        <button class="btn-secondary" id="btnDismissSosAlarm" style="width: 100%; padding: 12px;">Понятно, отключить сирену</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming Alarm / Wakeup Modal (on child's phone) -->
+  <div class="modal" id="modalIncomingCall">
+    <div class="modal-card incoming-call-card">
+      <div class="call-pulse-icon">🚨</div>
+      <div class="call-title">ВЫЗОВ ОТ РОДИТЕЛЕЙ!</div>
+      <div class="call-caller-id" id="incomingCallerName">РОДИТЕЛЬ</div>
+      <div class="call-channel-info" id="incomingChannelInfo">Срочное оповещение</div>
+
+      <div class="modal-footer-row" style="margin-top: 18px;">
+        <button class="btn-primary btn-call-accept" id="btnAcceptCall" style="width:100%;">🟢 Я ЗДЕСЬ (ОТВЕТИТЬ)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add App from Child's Installed Apps -->
+  <div class="modal" id="modalAddApp">
+    <div class="modal-card" style="max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3>➕ Приложения на телефоне ребенка</h3>
+        <button class="modal-close" id="btnCloseAddApp">&times;</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 12px;">
+        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">Выберите нужное приложение из списка установленных у ребенка:</p>
+        <input type="text" id="inputFilterChildApps" placeholder="🔍 Поиск по названию..." style="width: 100%; margin-bottom: 12px; padding: 10px; border-radius: 8px; background: #0d1520; border: 1px solid var(--border-color); color: #fff; font-size: 13px;">
+        <div class="child-installed-apps-list" id="childInstalledAppsList" style="display: flex; flex-direction: column; gap: 6px;">
+          <!-- Dynamically populated from child device -->
+          <div style="text-align: center; color: #64748b; padding: 20px; font-size: 12px;">Загрузка списка приложений...</div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 8px;">
+        <button class="btn-secondary" id="btnRefreshChildApps" style="font-size: 11px;">🔄 Запросить у ребенка</button>
+        <button class="btn-primary" id="btnDismissAddApp">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Ambient Listening (Parent side) -->
+  <div class="modal" id="modalConfirmAmbient">
+    <div class="modal-card" style="text-align: center;">
+      <div class="modal-header">
+        <h3>🎙️ Прослушивание окружения</h3>
+        <button class="modal-close" id="btnCloseConfirmAmbient">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+        <div style="font-size: 38px; margin-bottom: 8px;">🎙️</div>
+        <p style="font-size: 13px; color: #cbd5e1; margin-bottom: 10px; line-height: 1.4;">
+          Включить скрытую аудиотрансляцию микрофона ребенка в реальном времени?
+        </p>
+        <p style="font-size: 11px; color: #94a3b8; margin-bottom: 16px;">
+          Для прослушивания удерживайте фиолетовую кнопку. При отпускании трансляция сразу отключится:
+        </p>
+        <button class="btn-primary" id="btnModalHoldAmbient" style="width: 100%; padding: 18px; font-size: 14px; font-weight: bold; background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); border: 2px solid #a78bfa; border-radius: 12px; cursor: pointer; user-select: none;">
+          🎙️ ЗАЖМИТЕ И СЛУШАЙТЕ
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btnDismissConfirmAmbient" style="width: 100%;">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Emergency Call (Parent side) -->
+  <div class="modal" id="modalConfirmEmergencyCall">
+    <div class="modal-card" style="text-align: center;">
+      <div class="modal-header">
+        <h3>🚨 Экстренный вызов</h3>
+        <button class="modal-close" id="btnCloseConfirmEmergency">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px;">
+        <div style="font-size: 44px; margin-bottom: 8px;">🚨</div>
+        <h4 style="font-size: 15px; color: #f87171; margin-bottom: 8px;">Отправить тревожный сигнал?</h4>
+        <p style="font-size: 12px; color: #cbd5e1; margin-bottom: 12px; line-height: 1.4;">
+          На телефоне ребенка на 100% громкости включится сирена и зажжется экран (даже если телефон без звука).
+        </p>
+      </div>
+      <div class="modal-footer" style="display: flex; gap: 8px;">
+        <button class="btn-secondary" id="btnDismissConfirmEmergency" style="flex: 1;">Отмена</button>
+        <button class="btn-primary" id="btnExecuteEmergencyCall" style="flex: 1; background: #ef4444; border-color: #f87171;">🚨 Вызвать</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Named Geofence Zone (Home, School, etc.) -->
+  <div class="modal" id="modalAddGeofenceZone">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>➕ Новая гео-зона ребенка</h3>
+        <button class="modal-close" id="btnCloseAddZone">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Быстрый выбор зоны:</label>
+          <div class="quick-chips-row" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+            <button class="chip-btn zone-preset-btn" data-name="Дом" data-icon="🏠">🏠 Дом</button>
+            <button class="chip-btn zone-preset-btn" data-name="Школа" data-icon="🏫">🏫 Школа</button>
+            <button class="chip-btn zone-preset-btn" data-name="Секция" data-icon="⚽">⚽ Секция</button>
+            <button class="chip-btn zone-preset-btn" data-name="Бабушка" data-icon="👵">👵 Бабушка</button>
+            <button class="chip-btn zone-preset-btn" data-name="Кружок" data-icon="🎨">🎨 Кружок</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Название гео-зоны:</label>
+          <input type="text" id="inputNewZoneName" placeholder="Например: Дом или Школа №12">
+        </div>
+        <div class="form-group">
+          <label>Радиус зоны вокруг точки:</label>
+          <div class="radius-buttons" style="margin-top: 6px;">
+            <button class="radius-btn zone-radius-btn" data-r="50">50м</button>
+            <button class="radius-btn zone-radius-btn active" data-r="100">100м</button>
+            <button class="radius-btn zone-radius-btn" data-r="200">200м</button>
+            <button class="radius-btn zone-radius-btn" data-r="500">500м</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Координаты центра зоны:</label>
+          <button class="btn-secondary" id="btnUseCurrentChildLocForZone" style="width: 100%; font-size: 11px; margin-bottom: 6px;">📍 Использовать текущее место ребенка</button>
+          <div style="font-size: 11px; color: #64748b;" id="zoneCoordsPreview">Координаты: не выбраны</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btnSaveGeofenceZone" style="width: 100%;">Сохранить гео-зону</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings / PIN Management Modal -->
+  <div class="modal" id="modalConfig">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>⚙️ Настройки Guardian Kids</h3>
+        <button class="modal-close" id="btnCloseConfig">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Уникальный ID ребенка (для привязки):</label>
+          <input type="text" id="inputChildUniqueId" maxlength="12" value="7777">
+          <small style="color: #8ca0b3; font-size: 10px; display: block; margin-top: 4px;">
+            Укажите 6-значный номер, отображаемый на экране ребенка.
+          </small>
+        </div>
+
+        <!-- Child Profile Info in Parent Settings -->
+        <div class="form-group">
+          <label>Имя ребенка и аватар:</label>
+          <input type="text" id="inputParentChildName" placeholder="Имя ребенка (например: Алиса)" style="margin-bottom: 8px;">
+          <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">Аватар на карте:</div>
+          <div class="avatar-picker-grid" id="parentChildAvatarGrid">
+            <!-- Dynamically populated avatar choices -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Управление паролями профилей:</label>
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 11px; color: #94a3b8; width: 95px;">PIN Родителя:</span>
+            <input type="password" id="inputSettingsAdminPin" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width: 80px; text-align: center; font-weight: bold; font-size: 15px; letter-spacing: 4px;" placeholder="••••">
+            <button class="btn-secondary" id="btnSaveAdminPinDirect" style="padding: 6px 10px; font-size: 11px;">💾 Сохранить</button>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 11px; color: #94a3b8; width: 95px;">PIN Ребенка:</span>
+            <input type="password" id="inputSettingsChildPin" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width: 80px; text-align: center; font-weight: bold; font-size: 15px; letter-spacing: 4px;" placeholder="••••">
+            <button class="btn-secondary" id="btnSaveChildPinDirect" style="padding: 6px 10px; font-size: 11px;">💾 Сохранить</button>
+          </div>
+
+          <!-- Biometric Authentication Setting -->
+          <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 6px;">
+            <div>
+              <div style="font-weight: 500; font-size: 11px; color: #f1f5f9;">Вход по отпечатку пальца</div>
+              <small style="color: #94a3b8; font-size: 9px; display: block;">Запрашивать сканер при входе родителя</small>
+            </div>
+            <input type="checkbox" id="toggleBiometricAuth" style="width: 18px; height: 18px; accent-color: #3b82f6;" checked>
+          </div>
+        </div>
+
+        <!-- OTA Updates Section for Parent Device -->
+        <div class="form-group" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+          <label style="font-weight: bold; color: #60a5fa; display: flex; align-items: center; justify-content: space-between;">
+            <span>📡 Обновление этого устройства (OTA)</span>
+            <span id="labelCurrentAppVersion" style="font-size: 10px; color: #94a3b8;">v2.5.0</span>
+          </label>
+          <small style="color: #8ca0b3; font-size: 10px; display: block; margin-bottom: 8px;">
+            Вставьте прямую ссылку на .apk файл (например: http://192.168.0.15:8080/app-debug.apk) либо URL манифеста version.json:
+          </small>
+          <input type="text" id="inputOtaManifestUrl" placeholder="Прямой URL на APK или version.json" value="http://192.168.0.15:8080/app-debug.apk" style="font-size: 11px; margin-bottom: 8px;">
+          <button class="btn-secondary" id="btnCheckOtaUpdate" style="width: 100%; margin-bottom: 6px;">🔄 Проверить и обновить это устройство</button>
+          
+          <!-- Download progress bar -->
+          <div id="otaProgressContainer" style="display: none; margin-top: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
+              <span id="otaProgressStatus" style="color: #cbd5e1;">Загрузка обновления...</span>
+              <span id="otaProgressPercent" style="color: #60a5fa; font-weight: bold;">0%</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: #0f172a; border-radius: 4px; overflow: hidden; border: 1px solid #334155;">
+              <div id="otaProgressBarFill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.2s;"></div>
+            </div>
+          </div>
+
+          <!-- Update Available Card -->
+          <div id="otaAvailableCard" style="display: none; margin-top: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 10px; padding: 10px;">
+            <div style="font-size: 12px; font-weight: bold; color: #93c5fd; margin-bottom: 4px;" id="otaNewVersionTitle">Доступна новая версия: v2.5.0</div>
+            <p style="font-size: 10px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.3;" id="otaChangelogText">Список изменений...</p>
+            <button class="btn-primary" id="btnDownloadInstallOta" style="width: 100%; font-size: 11px; padding: 8px; background: #2563eb;">📥 Скачать и установить сейчас</button>
+          </div>
+
+          <!-- Version Info & History Button -->
+          <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 8px;">
+            <span style="font-size: 11px; color: #94a3b8;" id="labelAppVersionDetails">Версия: v2.5.0 (сборка 4)</span>
+            <button class="btn-secondary" id="btnShowVersionHistory" style="font-size: 10px; padding: 4px 8px;">📋 История версий</button>
+          </div>
+        </div>
+
+        <!-- Autostart / Battery Permissions Helper -->
+        <div class="form-group" style="margin-top: 10px;">
+          <button class="btn-secondary" id="btnOpenAutostartSettings" style="width: 100%; font-size: 11px;">⚡ Настройки автозапуска и фона</button>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <button class="btn-secondary" id="btnResetSetupCompletely" style="width: 100%; color:#ef4444; border-color: rgba(239,68,68,0.4);">🔄 Сбросить привязку и начать заново</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btnSaveConfig">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Child Device Settings (Protected by Parent PIN) -->
+  <div class="modal" id="modalChildConfig">
+    <div class="modal-card" style="max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3>⚙️ Настройки устройства (Ребёнок)</h3>
+        <button class="modal-close" id="btnCloseChildConfig">&times;</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 14px;">
+        <!-- Profile info: Name & Avatar -->
+        <div class="form-group">
+          <label style="font-weight: bold; color: #f1f5f9;">Профиль ребенка:</label>
+          <input type="text" id="inputChildNameConfig" placeholder="Имя ребенка (например: Алиса)" style="margin-bottom: 8px;">
+          <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">Выберите аватар:</div>
+          <div class="avatar-picker-grid" id="childAvatarPickerGrid">
+            <!-- Rendered avatar chips -->
+          </div>
+        </div>
+
+        <!-- Parent PIN on this Child Device -->
+        <div class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 10px;">
+          <label style="font-weight: bold; color: #f59e0b;">🔑 Родительский PIN на этом устройстве:</label>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
+            <input type="password" id="inputChildDeviceAdminPin" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width: 80px; text-align: center; font-weight: bold; font-size: 15px; letter-spacing: 4px;" placeholder="••••">
+            <button class="btn-secondary" id="btnSaveChildDeviceAdminPin" style="padding: 6px 10px; font-size: 11px;">💾 Сохранить</button>
+          </div>
+          <small style="color: #94a3b8; font-size: 9px; display: block; margin-top: 4px;">PIN для открытия настроек на этом телефоне (по умолчанию: 1234).</small>
+        </div>
+
+        <!-- Biometric Authentication Toggle for Child Device -->
+        <div class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+            <div>
+              <div style="font-weight: 500; font-size: 11px; color: #f1f5f9;">Вход по отпечатку пальца</div>
+              <small style="color: #94a3b8; font-size: 9px; display: block;">Разрешить вход в настройки по отпечатку пальца</small>
+            </div>
+            <input type="checkbox" id="childToggleBiometrics" style="width: 18px; height: 18px; accent-color: #3b82f6;" checked>
+          </div>
+        </div>
+
+        <!-- Autostart / Background settings -->
+        <div class="form-group" style="margin-top: 10px;">
+          <button class="btn-secondary" id="btnChildOpenAutostart" style="width: 100%; font-size: 11px; padding: 9px;">⚡ Настройка автозапуска и фона</button>
+        </div>
+
+
+        <!-- OTA Updates Section for Child Device -->
+        <div class="form-group" style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <label style="font-weight: bold; color: #60a5fa; display: flex; align-items: center; justify-content: space-between;">
+            <span>📡 Проверка и обновление этого устройства</span>
+            <span id="childDeviceAppVersionLabel" style="font-size: 10px; color: #94a3b8;">v2.5.0</span>
+          </label>
+          <small style="color: #8ca0b3; font-size: 10px; display: block; margin-bottom: 6px;">
+            Ссылка на источник обновления (прямой APK или version.json):
+          </small>
+          <input type="text" id="inputChildOtaUrl" placeholder="Прямой URL на APK или version.json" value="http://192.168.0.15:8080/app-debug.apk" style="font-size: 11px; margin-bottom: 8px;">
+          <button class="btn-secondary" id="btnChildCheckOtaUpdate" style="width: 100%; margin-bottom: 6px;">🔄 Проверить и обновить это устройство</button>
+          
+          <!-- Download progress bar -->
+          <div id="childOtaProgressContainer" style="display: none; margin-top: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
+              <span id="childOtaProgressStatus" style="color: #cbd5e1;">Загрузка обновления...</span>
+              <span id="childOtaProgressPercent" style="color: #60a5fa; font-weight: bold;">0%</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: #0f172a; border-radius: 4px; overflow: hidden; border: 1px solid #334155;">
+              <div id="childOtaProgressBarFill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.2s;"></div>
+            </div>
+          </div>
+
+          <!-- Update Available Card for Child Device -->
+          <div id="childOtaAvailableCard" style="display: none; margin-top: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 10px; padding: 10px;">
+            <div style="font-size: 12px; font-weight: bold; color: #93c5fd; margin-bottom: 4px;" id="childOtaNewVersionTitle">Доступна новая версия</div>
+            <p style="font-size: 10px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.3;" id="childOtaChangelogText">Список изменений...</p>
+            <button class="btn-primary" id="btnChildDownloadInstallOta" style="width: 100%; font-size: 11px; padding: 8px; background: #2563eb;">📥 Скачать и установить сейчас</button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+          <button class="btn-secondary" id="btnChildResetSetup" style="width: 100%; color: #ef4444; border-color: rgba(239, 68, 68, 0.4); font-size: 11px;">🔄 Сбросить роль и переключить на Родителя</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btnSaveChildConfig" style="width: 100%;">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Version History / Changelog -->
+  <div class="modal" id="modalVersionHistory">
+    <div class="modal-card" style="max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3>📋 История обновлений Guardian Kids</h3>
+        <button class="modal-close" id="btnCloseVersionHistory">&times;</button>
+      </div>
+      <div class="modal-body" style="overflow-y: auto; flex: 1; padding: 12px;" id="versionHistoryList">
+        <!-- Dynamically rendered version list -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btnDismissVersionHistory" style="width: 100%;">Понятно</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: App Just Updated Celebration Notice -->
+  <div class="modal" id="modalAppUpdated">
+    <div class="modal-card" style="text-align: center; max-width: 330px; border: 1px solid #10b981;">
+      <div style="font-size: 48px; margin-bottom: 6px;">🎉</div>
+      <h3 style="color: #10b981; margin-bottom: 8px;">Guardian Kids обновлено!</h3>
+      <p id="appUpdatedModalText" style="font-size: 13px; color: #cbd5e1; margin-bottom: 16px; line-height: 1.4;">
+        Приложение успешно обновлено до версии v2.5.0. Все функции безопасности, авто-защита и связь активны!
+      </p>
+      <button class="btn-primary" id="btnDismissAppUpdated" style="width: 100%; background: #10b981;">Отлично, начать работу</button>
+    </div>
+  </div>
+
+  <!-- Modal: Restricted Settings Help (Android 13/14+) -->
+  <div class="modal" id="modalRestrictedSettingsHelp">
+    <div class="modal-card" style="max-width: 360px; border: 1px solid rgba(96, 165, 250, 0.5);">
+      <div class="modal-header">
+        <h3 style="color: #60a5fa; font-size: 15px;">🛡️ Доступ к спец. возможностям</h3>
+        <button class="modal-close" id="btnCloseRestrictedHelp">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 14px; font-size: 12px; line-height: 1.45; color: #e2e8f0;">
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 11px; color: #fca5a5;">
+          <strong>«Доступ для приложения запрещен»?</strong><br>
+          В Android 13+ (Xiaomi, HyperOS, Samsung) для приложений не из Google Play система блокирует спец. возможности до ручного подтверждения в настройках.
+        </div>
+        <div style="font-weight: bold; margin-bottom: 8px; color: #f1f5f9;">Как разблокировать за 15 секунд:</div>
+        <ol style="margin: 0 0 14px 0; padding-left: 18px; font-size: 11px; color: #cbd5e1; display: flex; flex-direction: column; gap: 6px;">
+          <li>Нажмите синюю кнопку <strong>«Открыть "О приложении"»</strong> ниже.</li>
+          <li>В открывшемся системном окне нажмите <strong>меню из 3 точек (⋮)</strong> в правом верхнем углу <em>(на некоторых версиях Xiaomi/HyperOS — прокрутите в самый низ)</em>.</li>
+          <li>Выберите <strong>«Разрешить доступ к ограниченным настройкам»</strong> (Allow restricted settings) и подтвердите графическим ключом / PIN телефона.</li>
+          <li>Вернитесь в «Спец. возможности» и включите <strong>Guardian Kids Service</strong>!</li>
+        </ol>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="btn-primary" id="btnOpenAppDetailsFromHelp" style="padding: 10px; font-size: 12px; font-weight: bold; background: linear-gradient(135deg, #3b82f6, #2563eb); border-radius: 8px;">⚙️ Открыть страницу «О приложении»</button>
+          <button class="btn-secondary" id="btnOpenAccessibilityFromHelp" style="padding: 9px; font-size: 11px; border-radius: 8px;">♿ Перейти в Спец. возможности</button>
+          <button class="btn-secondary" id="btnDismissRestrictedHelp" style="padding: 8px; font-size: 11px; color: #94a3b8; border-radius: 8px;">Понятно, закрыть</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Child Settings PIN Entry -->
+  <div class="modal" id="modalChildPinAuth">
+    <div class="modal-card" style="max-width: 320px; text-align: center; border: 1px solid rgba(245, 158, 11, 0.5);">
+      <div class="modal-header" style="justify-content: center; position: relative;">
+        <h3 style="color: #f59e0b; font-size: 15px;">🔒 Вход в настройки</h3>
+        <button class="modal-close" id="btnCloseChildPinAuth" style="position: absolute; right: 12px; top: 12px;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px 14px;">
+        <div style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">
+          Введите 4-значный родительский PIN-код для входа в настройки ребенка:
+        </div>
+        <input type="password" id="inputChildSettingsEnteredPin" maxlength="4" inputmode="numeric" pattern="[0-9]*"
+               style="font-size: 24px; text-align: center; letter-spacing: 10px; font-weight: bold; padding: 8px 10px; width: 140px; margin: 0 auto 10px auto; border: 2px solid #f59e0b; border-radius: 10px; background: rgba(0,0,0,0.4); color: #fff;" placeholder="••••" autocomplete="off">
+        <div id="childPinAuthError" style="display: none; color: #ef4444; font-size: 11px; margin-bottom: 10px; font-weight: 500;">
+          ❌ Неверный PIN Родителя!
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: center;">
+          <button class="btn-primary" id="btnSubmitChildPinAuth" style="flex: 1; padding: 9px; font-size: 12px; font-weight: bold; background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; border-radius: 8px;">Войти</button>
+          <button class="btn-secondary" id="btnCancelChildPinAuth" style="padding: 9px 12px; font-size: 12px; border-radius: 8px;">Отмена</button>
+        </div>
+        <div style="margin-top: 10px; font-size: 10px; color: #64748b;">
+          По умолчанию: <strong>1234</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Processing, Cryptography & Network Engine Scripts -->
+  <script src="crypto.js"></script>
+  <script src="audio-fx.js"></script>
+  <script src="network.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

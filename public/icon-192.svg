@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+  <!-- Background Rounded Square -->
+  <rect width="192" height="192" rx="42" fill="#0b1118"/>
+  <circle cx="96" cy="96" r="76" fill="#182330" opacity="0.6"/>
+
+  <!-- Outer Shield -->
+  <path d="M96 28 C124 28 152 38 152 54 C152 98 124 134 96 150 C68 134 40 98 40 54 C40 38 68 28 96 28 Z" fill="url(#shieldGrad)"/>
+
+  <!-- Inner Shield -->
+  <path d="M96 36 C118 36 142 44 142 58 C142 94 118 126 96 140 C74 126 50 94 50 58 C50 44 74 36 96 36 Z" fill="#0f172a"/>
+
+  <!-- Accent Ring -->
+  <path d="M96 44 C112 44 132 50 132 62 C132 90 112 118 96 130 C80 118 60 90 60 62 C60 50 80 44 96 44 Z" fill="url(#accentGrad)"/>
+
+  <!-- Core Shield Plate -->
+  <path d="M96 52 C108 52 122 56 122 66 C122 86 108 108 96 118 C84 108 70 86 70 66 C70 56 84 52 96 52 Z" fill="#1e293b"/>
+
+  <!-- Center Star Emblem -->
+  <polygon points="96,62 101,76 116,76 104,85 108,100 96,91 84,100 88,85 76,76 91,76" fill="#f59e0b"/>
+</svg>

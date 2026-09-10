@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Guardian Kids</string>
+    <string name="accessibility_service_description">Служба защиты Guardian Kids для автоматического контроля безопасности, поддержания работы в фоне и авто-включения геолокации.</string>
+</resources>

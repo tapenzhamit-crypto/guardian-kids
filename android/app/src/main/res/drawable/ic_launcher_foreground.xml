@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Shield Border -->
+    <path
+        android:fillColor="#2563eb"
+        android:pathData="M54,22 C68,22 82,27 82,36 C82,60 68,78 54,86 C40,78 26,60 26,36 C26,27 40,22 54,22 Z" />
+
+    <!-- Inner Shield Body -->
+    <path
+        android:fillColor="#0f172a"
+        android:pathData="M54,26 C65,26 77,30 77,38 C77,58 65,74 54,81 C43,74 31,58 31,38 C31,30 43,26 54,26 Z" />
+
+    <!-- Shield Accent Ring -->
+    <path
+        android:fillColor="#10b981"
+        android:pathData="M54,30 C62,30 72,34 72,40 C72,55 62,69 54,75 C46,69 36,55 36,40 C36,34 46,30 54,30 Z" />
+
+    <!-- Inner Shield Core -->
+    <path
+        android:fillColor="#1e293b"
+        android:pathData="M54,34 C60,34 68,37 68,42 C68,53 60,65 54,70 C48,65 40,53 40,42 C40,37 48,34 54,34 Z" />
+
+    <!-- Central Child Safety Star / Sparkle Emblem -->
+    <path
+        android:fillColor="#f59e0b"
+        android:pathData="M54,40 L57,48 L65,48 L59,53 L61,61 L54,56 L47,61 L49,53 L43,48 L51,48 Z" />
+</vector>

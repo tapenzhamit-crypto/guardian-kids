@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="shieldGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="accentGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0b1118"/>
+  <circle cx="256" cy="256" r="200" fill="#182330" opacity="0.6"/>
+
+  <!-- Outer Shield -->
+  <path d="M256 75 C330 75 405 102 405 144 C405 262 330 357 256 400 C182 357 107 262 107 144 C107 102 182 75 256 75 Z" fill="url(#shieldGrad512)"/>
+
+  <!-- Inner Shield -->
+  <path d="M256 96 C315 96 379 117 379 155 C379 251 315 336 256 373 C197 336 133 251 133 155 C133 117 197 96 256 96 Z" fill="#0f172a"/>
+
+  <!-- Accent Ring -->
+  <path d="M256 117 C299 117 352 133 352 165 C352 240 299 315 256 347 C213 315 160 240 160 165 C160 133 213 117 256 117 Z" fill="url(#accentGrad512)"/>
+
+  <!-- Core Shield Plate -->
+  <path d="M256 139 C288 139 325 149 325 176 C325 229 288 288 256 315 C224 288 187 229 187 176 C187 149 224 139 256 139 Z" fill="#1e293b"/>
+
+  <!-- Center Star Emblem -->
+  <polygon points="256,165 270,203 310,203 278,227 289,267 256,243 223,267 234,227 202,203 242,203" fill="#f59e0b"/>
+</svg>
