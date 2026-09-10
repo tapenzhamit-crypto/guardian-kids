@@ -1,0 +1,12 @@
+{
+  "name": "Guardian Kids",
+  "description": "Система родительского контроля Guardian Kids: мониторинг геолокации, контроль смещения, рация PTT, отправка фото и удаленное управление",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
